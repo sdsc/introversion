@@ -18,7 +18,13 @@ $AUTHENTICATED_USER = 'someuser';
 
 // test insert of asset attribute response
 $r = $db->insertResponse(0,1,0);
-echo $r;
 
+$r = $db->getResponse(0,1);
+
+$r = $db->insertResponse(0,1,1);
+
+$r = $db->getResponse(0,1);
+
+print_r($r);
 
 ?>

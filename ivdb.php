@@ -26,6 +26,7 @@ class ivdb
 	try
 	{
 	    $this->dbh = new PDO("sqlite:$dbfile", '', '');
+	    $this->dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 	} catch(PDOException $e)
 	{
 	    die("Unable to connect to database: " . $e->getMessage());
@@ -84,13 +85,7 @@ class ivdb
 	    $sth->bindParam(':asset_type', $asset_type);
 	    $sth->bindParam(':entered_by', $AUTHENTICATED_USER);
 	    if( $asset_id !== -1 ) $sth->bindParam(':asset_id', $asset_id);	
-
-	    $rc = $sth->execute();
-	    if( !$rc )
-	    {
-		$ec = $this->dbh->errorInfo();
-		throw new Exception($ec[2]);
-	    }
+	    $sth->execute();
 
 	    // need the asset id if we added a new one
 	    if( $asset_id === -1 ) $res = $this->dbh->query("SELECT max(asset_id) from assets");
@@ -155,12 +150,7 @@ class ivdb
 	    $sth = $this->dbh->prepare($q);
 	    $sth->bindParam(':entered_by', $AUTHENTICATED_USER);
 	    $sth->bindParam(':asset_id',   $asset_id);
-	    $rc = $sth->execute();
-	    if( !$rc )
-	    {
-		$ec = $this->dbh->errorInfo();
-		throw new Exception($ec[2]);
-	    }
+	    $sth->execute();
 	    if( $sth->rowCount() != 1 )
 	    {
 		throw new Exception("Wrong number of rows affected. Expected 1, got: " . $sth->rowCount());
@@ -190,7 +180,45 @@ class ivdb
      *  analyze, compared to free-form text.
      */
 
+
+    /* retrieve response columns for response described by asset and attr id
+     * 
+     * if $history is set to true, the returned array contains every
+     * revision of the response, in descending chronological order.
+     *
+     * returns something, even empty array, unless something goes horribly
+     * wrong, in which case, dies.
+     *
+     */
+    function getResponse($asset_id, $attr_id, $history = false)
+    {
+	if( $history === true )
+	{
+	    $q = "SELECT * from asset_attribute_responses where
+	      asset_id = :asset_id AND attr_id = :attr_id order by
+	      entered_on desc";
+	} else
+	{
+	    $q = "SELECT * from asset_attribute_responses where 
+	      asset_id = :asset_id AND attr_id = :attr_id AND 
+	      superseded_on = 0";
+	}
+
+	try
+	{
+	    $sth = $this->dbh->prepare($q);
+	    $sth->bindParam(':asset_id', $asset_id);
+	    $sth->bindParam(':attr_id', $attr_id);
+	    $sth->execute();
+	    return $sth->fetchAll(PDO::FETCH_ASSOC);
+	} catch(Exception $e)
+	{
+	    die("getResponses() - failed to fetch response for asset id $asset_id, attribute id $attr_id : " . $e->getMessage());
+	}
+    }
+
     
+
     /* insert a fresh attribute response for a given attribute and asset
      * 
      * The caller is responsible for sanitizing and sanity-checking the
@@ -203,26 +231,73 @@ class ivdb
     {
 	global $AUTHENTICATED_USER;
 
+	$needs_expire = false;
+
+	// ok, so indiscriminate inserts are easier to handle.
+	// only make changes if necessary.
+	$oldresp = $this->getResponse($asset_id, $attr_id, true);
+	if( isset($oldresp[0]) && isset($oldresp[0]['response']) && $oldresp[0]['superseded_on'] == 0 )
+	{
+	    if( $oldresp[0]['response']  == $val )
+	    {
+		return;
+	    }
+
+	    $needs_expire = true;
+
+	    // if the user somehow manages two updates in <1 second, a
+	    // constraint violation will occur (superseded_on = now() x 2 rows)
+	    // delay a bit to make sure this doesn't happen.
+	    if( isset($oldresp[1]) && isset($oldresp[1]['superseded_on']) && 
+	      $oldresp[1]['superseded_on'] == time() )
+	    {
+		sleep(1); 	
+	    }
+	}
+
+	// guess there's work to do...
+	$this->dbh->beginTransaction();
+
+	// expire old response
+	if( $needs_expire )
+	{
+	    $q = "update asset_attribute_responses set
+		  superseded_by = :superseded_by,
+		  superseded_on = (strftime('%s', 'now'))
+		  where asset_id = :asset_id AND
+		  attr_id = :attr_id AND
+		  superseded_on = 0";
+	
+	    try
+	    {
+		$sth = $this->dbh->prepare($q);
+		$sth->bindParam(':asset_id', $asset_id);
+		$sth->bindParam(':attr_id',  $attr_id);
+		$sth->bindParam(':superseded_by', $AUTHENTICATED_USER);
+		$sth->execute();
+		if( $sth->rowCount() != 1 )
+		{
+		    throw new Exception("Wrong number of rows affected. Expected 1, got: " . $sth->rowCount());
+		}
+	    } catch(Exception $e)
+	    {
+		$this->dbh->rollback();
+		die("insertResponse() - failed to expire old response for asset id $asset_id, attribute id $attr_id : " . $e->getMessage());
+	    }
+	}
+
 	$q =  "insert into asset_attribute_responses (asset_id, attr_id, 
 	      response, entered_by) values(:asset_id, :attr_id, :response,
 	      :entered_by)";
 
 	try
 	{
-	    $this->dbh->beginTransaction();
 	    $sth = $this->dbh->prepare($q);
 	    $sth->bindParam(':asset_id', $asset_id);
 	    $sth->bindParam(':attr_id', $attr_id);
 	    $sth->bindParam(':response', $val);
 	    $sth->bindParam(':entered_by', $AUTHENTICATED_USER);
-	    $rc = $sth->execute();
-
-	    if( !$rc )
-	    {
-		$ec = $this->dbh->errorInfo();
-		throw new Exception($ec[2]);
-	    }
-
+	    $sth->execute();
 	    $this->dbh->commit();
 	} catch(Exception $e)
 	{

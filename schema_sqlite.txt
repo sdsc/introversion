@@ -9,8 +9,8 @@ create table if not exists assets(
   name  		text primary key COLLATE NOCASE,
   description		text,
   ip_int    		integer DEFAULT NULL,
-  constraint uniq_a unique (asset_id,superseded_on) on conflict rollback,
-  constraint uniq_a_n unique (name) on conflict rollback
+  constraint uniq_a unique (asset_id,superseded_on) on conflict fail,
+  constraint uniq_a_n unique (name) on conflict fail
 );
 
   
@@ -35,7 +35,7 @@ create table if not exists asset_attributes(
   mitigation_impersonation 	real NOT NULL DEFAULT 0.0,
   parent_attr_id	integer DEFAULT NULL constraint paraid references assets (asset_id) on delete restrict,
   applicable_if_parent_false_instead_of_true	text DEFAULT NULL,
-  constraint uniq_aa unique (attr_id, superseded_on) on conflict rollback
+  constraint uniq_aa unique (attr_id, superseded_on) on conflict fail 
 );
 
 create table if not exists asset_attribute_responses (
@@ -51,7 +51,7 @@ create table if not exists asset_attribute_responses (
   superseded_by 	text DEFAULT NULL COLLATE NOCASE,
   response		text NOT NULL COLLATE NOCASE,
   
-  constraint uniq_aar unique (asset_id, attr_id, superseded_on) on conflict rollback
+  constraint uniq_aar unique (asset_id, attr_id, superseded_on) on conflict fail 
 );
 
 
