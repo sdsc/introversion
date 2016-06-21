@@ -98,7 +98,7 @@ class ivdb
 	{
 	    // weesa gonna die, never returns to caller
 	    $this->dbh->rollBack();
-	    die("insert_asset() - failed to add asset: " . $e->getMessage());
+	    die("insertAsset() - failed to add asset: " . $e->getMessage());
 	}
 
 	// if adding a new asset, we need to return the newly-added asset id
@@ -149,7 +149,7 @@ class ivdb
 	// expire the old row
 	$q = "UPDATE assets set superseded_on = (strftime('%s', 'now')), 
 	      superseded_by = :entered_by where asset_id = :asset_id and
-	      superseded_on is null";
+	      superseded_on = 0 ";
 	try 
 	{
 	    $sth = $this->dbh->prepare($q);
@@ -160,6 +160,10 @@ class ivdb
 	    {
 		$ec = $this->dbh->errorInfo();
 		throw new Exception($ec[2]);
+	    }
+	    if( $sth->rowCount() != 1 )
+	    {
+		throw new Exception("Wrong number of rows affected. Expected 1, got: " . $sth->rowCount());
 	    }
 	} catch(Exception $e)
 	{
@@ -174,6 +178,62 @@ class ivdb
 	
 	return $res;
     }
+
+
+
+    /* asset attribute responses - these are properties of assets
+     *  assets have attributes, these are those relevant to a given
+     *  asset.
+     *
+     *  For now, we're going to try binary responses
+     *  true/false.  This should be a little easier to enter and
+     *  analyze, compared to free-form text.
+     */
+
+    
+    /* insert a fresh attribute response for a given attribute and asset
+     * 
+     * The caller is responsible for sanitizing and sanity-checking the
+     * arguments to this function.  This function will die() if there's
+     * trouble.
+     * 
+     * Returns if everything went okay.
+     */
+    function insertResponse($asset_id, $attr_id, $val)
+    {
+	global $AUTHENTICATED_USER;
+
+	$q =  "insert into asset_attribute_responses (asset_id, attr_id, 
+	      response, entered_by) values(:asset_id, :attr_id, :response,
+	      :entered_by)";
+
+	try
+	{
+	    $this->dbh->beginTransaction();
+	    $sth = $this->dbh->prepare($q);
+	    $sth->bindParam(':asset_id', $asset_id);
+	    $sth->bindParam(':attr_id', $attr_id);
+	    $sth->bindParam(':response', $val);
+	    $sth->bindParam(':entered_by', $AUTHENTICATED_USER);
+	    $rc = $sth->execute();
+
+	    if( !$rc )
+	    {
+		$ec = $this->dbh->errorInfo();
+		throw new Exception($ec[2]);
+	    }
+
+	    $this->dbh->commit();
+	} catch(Exception $e)
+	{
+	    $this->dbh->rollBack();
+	    die("insertResponse() - failed to add attribute response: " . $e->getMessage());
+	}
+	// must be good if we're still here.
+	return;
+    }
+    
+
 }
 
 

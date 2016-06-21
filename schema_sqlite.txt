@@ -1,7 +1,7 @@
 create table if not exists assets(
   asset_id 		integer NOT NULL,
   entered_on   	 	integer default (strftime('%s', 'now')),
-  superseded_on 	integer DEFAULT NULL,
+  superseded_on 	integer DEFAULT 0,
   entered_by 		text NOT NULL COLLATE NOCASE,
   superseded_by 	text DEFAULT NULL COLLATE NOCASE,
   asset_type 		text NOT NULL COLLATE NOCASE,
@@ -17,7 +17,7 @@ create table if not exists assets(
 create table if not exists asset_attributes(
   attr_id 		integer	NOT NULL,
   entered_on 		integer DEFAULT (strftime('%s', 'now')),
-  superseded_on 	integer DEFAULT NULL,
+  superseded_on 	integer DEFAULT 0,
   entered_by 		text NOT NULL COLLATE NOCASE,
   superseded_by 	text DEFAULT NULL COLLATE NOCASE,
   display_priority 	integer NOT NULL DEFAULT 0,
@@ -46,7 +46,7 @@ create table if not exists asset_attribute_responses (
   			  (attr_id)
 			  on delete restrict on update restrict,
   entered_on 		integer DEFAULT (strftime('%s', 'now')),
-  superseded_on 	integer DEFAULT NULL,
+  superseded_on 	integer DEFAULT 0,
   entered_by 		text NOT NULL COLLATE NOCASE,
   superseded_by 	text DEFAULT NULL COLLATE NOCASE,
   response		text NOT NULL COLLATE NOCASE,
