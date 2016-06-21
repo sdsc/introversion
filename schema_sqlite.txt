@@ -1,0 +1,59 @@
+create table if not exists assets(
+  asset_id 		integer NOT NULL,
+  entered_on   	 	integer default (strftime('%s', 'now')),
+  superseded_on 	integer DEFAULT NULL,
+  entered_by 		text NOT NULL COLLATE NOCASE,
+  superseded_by 	text DEFAULT NULL COLLATE NOCASE,
+  asset_type 		text NOT NULL COLLATE NOCASE,
+  contact_emails 	text NOT NULL COLLATE NOCASE,
+  name  		text primary key COLLATE NOCASE,
+  description		text,
+  ip_int    		integer DEFAULT NULL,
+  constraint uniq_a unique (asset_id,superseded_on) on conflict rollback,
+  constraint uniq_a_n unique (name) on conflict rollback
+);
+
+  
+create table if not exists asset_attributes(
+  attr_id 		integer	NOT NULL,
+  entered_on 		integer DEFAULT (strftime('%s', 'now')),
+  superseded_on 	integer DEFAULT NULL,
+  entered_by 		text NOT NULL COLLATE NOCASE,
+  superseded_by 	text DEFAULT NULL COLLATE NOCASE,
+  display_priority 	integer NOT NULL DEFAULT 0,
+  body 		text NOT NULL,
+  verbose 		text NOT NULL,
+  rationale 	text NOT NULL,
+  type 		text NOT NULL,
+  loss_potential_disclosure 	real NOT NULL DEFAULT 0.0,
+  loss_potential_disruption 	real NOT NULL DEFAULT 0.0,
+  loss_potential_usurpation 	real NOT NULL DEFAULT 0.0,
+  loss_potential_impersonation 	real NOT NULL DEFAULT 0.0,
+  mitigation_disclosure 	real NOT NULL DEFAULT 0.0,
+  mitigation_disruption 	real NOT NULL DEFAULT 0.0,
+  mitigation_usurpation 	real NOT NULL DEFAULT 0.0,
+  mitigation_impersonation 	real NOT NULL DEFAULT 0.0,
+  parent_attr_id	integer DEFAULT NULL constraint paraid references assets (asset_id) on delete restrict,
+  applicable_if_parent_false_instead_of_true	text DEFAULT NULL,
+  constraint uniq_aa unique (attr_id, superseded_on) on conflict rollback
+);
+
+create table if not exists asset_attribute_responses (
+  resp_id		integer primary key,
+  asset_id 		integer constraint asid references assets (asset_id) 
+  			  on delete restrict on update restrict,
+  attr_id 		integer constraint atid references asset_attributes 
+  			  (attr_id)
+			  on delete restrict on update restrict,
+  entered_on 		integer DEFAULT (strftime('%s', 'now')),
+  superseded_on 	integer DEFAULT NULL,
+  entered_by 		text NOT NULL COLLATE NOCASE,
+  superseded_by 	text DEFAULT NULL COLLATE NOCASE,
+  response		text NOT NULL COLLATE NOCASE,
+  
+  constraint uniq_aar unique (asset_id, attr_id, superseded_on) on conflict rollback
+);
+
+
+
+  
