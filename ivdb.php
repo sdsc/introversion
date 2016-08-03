@@ -170,6 +170,179 @@ class ivdb
     }
 
 
+    /* asset attributes - these are properties that assets can have
+     */
+
+    /* adds an asset atribute
+     * 
+     * An attr_id of -1 (or not present in arg list) means to assign the next
+     * available attribute ID number.
+     *
+     * If the caller provides an attr_id > -1, then it is assumed that a db 
+     * transaction is already started and another one will not be started.
+     *
+     * returns attr_id
+     */
+    function insertAssetAttribute($display_priority, $body, 
+      $verbose, $rationale, $type, $loss_potential_disclosure, 
+      $loss_potential_disruption, $loss_potential_usurpation, 
+      $loss_potential_impersonation, $mitigation_disclosure, 
+      $mitigation_disruption, $mitigation_usurpation, 
+      $mitigation_impersonation, $attr_id = -1, $parent_attr_id = -1, 
+      $applicable_if_parent_false_instead_of_true = "F")
+    {
+	global $AUTHENTICATED_USER;
+
+	if( $attr_id === -1 )
+	{
+	    $q = "INSERT INTO asset_attributes (display_priority, body, verbose,
+	      rationale, type, loss_potential_disclosure, loss_potential_disruption,
+	      loss_potential_usurpation, loss_potential_impersonation,
+	      mitigation_disclosure, mitigation_disruption,
+	      mitigation_usurpation, mitigation_impersonation,
+	      parent_attr_id, applicable_if_parent_false_instead_of_true,
+	      entered_by, attr_id)
+	      values(:display_priority, :body, :verbose, :rationale, :type,
+	      :loss_potential_disclosure, :loss_potential_disruption,
+	      :loss_potential_usurpation, :loss_potential_impersonation,
+	      :mitigation_disclosure, :mitigation_disruption, 
+	      :mitigation_usurpation, :mitigation_impersonation,
+	      :parent_attr_id, :applicable_if_parent_false, :entered_by,
+	      (select case when max(attr_id) isnull then 0 else max(attr_id) + 1 end from asset_attributes))";
+	    
+	} else
+	{
+	    $q = "INSERT INTO asset_attributes (display_priority, body, verbose,
+	      rationale, type, loss_potential_disclosure, loss_potential_disruption,
+	      loss_potential_usurpation, loss_potential_impersonation,
+	      mitigation_disclosure, mitigation_disruption,
+	      mitigation_usurpation, mitigation_impersonation,
+	      parent_attr_id, applicable_if_parent_false_instead_of_true,
+	      entered_by, attr_id)
+	      values(:display_priority, :body, :verbose, :rationale, :type,
+	      :loss_potential_disclosure, :loss_potential_disruption,
+	      :loss_potential_usurpation, :loss_potential_impersonation,
+	      :mitigation_disclosure, :mitigation_disruption, 
+	      :mitigation_usurpation, :mitigation_impersonation,
+	      :parent_attr_id, :applicable_if_parent_false, :entered_by,
+	      :attr_id)";
+	}
+
+	try
+	{
+	    if( $attr_id === -1 ) $this->dbh->beginTransaction();
+	    $sth = $this->dbh->prepare($q);
+	    $sth->bindParam(':display_priority', $display_priority);
+	    $sth->bindParam(':body', $body);
+	    $sth->bindParam(':verbose', $verbose);
+	    $sth->bindParam(':rationale', $rationale);
+	    $sth->bindParam(':type', $type);
+	    $sth->bindParam(':loss_potential_disclosure', $loss_potential_disclosure);
+	    $sth->bindParam(':loss_potential_disruption', $loss_potential_disruption);
+	    $sth->bindParam(':loss_potential_usurpation', $loss_potential_usurpation);
+	    $sth->bindParam(':loss_potential_impersonation', $loss_potential_impersonation);
+	    $sth->bindParam(':mitigation_disclosure', $mitigation_disclosure);
+	    $sth->bindParam(':mitigation_disruption', $mitigation_disruption);
+	    $sth->bindParam(':mitigation_usurpation', $mitigation_usurpation);
+	    $sth->bindParam(':mitigation_impersonation', $mitigation_impersonation);
+	    $sth->bindParam(':parent_attr_id', $parent_attr_id);
+	    $sth->bindParam(':applicable_if_parent_false',$applicable_if_parent_false_instead_of_true);
+	    
+	    $sth->bindParam(':entered_by', $AUTHENTICATED_USER);
+	    if( $attr_id !== -1 ) $sth->bindParam(':attr_id', $attr_id);	
+	    $sth->execute();
+
+	    // need the asset id if we added a new one
+	    if( $attr_id === -1 ) $res = $this->dbh->query("SELECT max(attr_id) from asset_attributes");
+	} catch(Exception $e)
+	{
+	    // weesa gonna die, never returns to caller
+	    $this->dbh->rollBack();
+	    die("insertAssetAttribute() - failed to add asset attribute: " . $e->getMessage());
+	}
+
+	// if adding a new asset attr, we need to return the newly-added attr id
+	// commit after getting the rowid, to avoid race conditions
+	if( $attr_id === -1 )
+	{
+	    $this->dbh->commit();
+	    // guess you can also do fetchrow
+	    foreach($res as $row)
+	    {
+		return($row[0]);
+	    }
+	}
+
+	// otherwise use the provided attr id (because max(attr_id) isn't the
+	// attribute id we added.
+	return($attr_id);
+
+    }
+
+
+
+    /* update an asset attribute
+     * 
+     * like assets, we don't do an update, rather, expire old row and
+     * insert a new one.
+     *
+     * returns asset id
+     */
+    function updateAssetAttribute($display_priority, $body, 
+      $verbose, $rationale, $type, $loss_potential_disclosure, 
+      $loss_potential_disruption, $loss_potential_usurpation, 
+      $loss_potential_impersonation, $mitigation_disclosure, 
+      $mitigation_disruption, $mitigation_usurpation, 
+      $mitigation_impersonation, $attr_id, $parent_attr_id = -1, 
+      $applicable_if_parent_false_instead_of_true = "F")
+    {
+
+	global $AUTHENTICATED_USER;
+
+	// try to do everything as an atomic operation
+	try
+	{
+	    $this->dbh->beginTransaction();
+	} catch(Exception $e)
+	{
+	    die("updateAssetAttribute() - failed to begin transaction: " . $e->getMessage());
+	}
+
+	// expire the old row
+	$q = "UPDATE asset_attributes set superseded_on = (strftime('%s', 'now')), 
+	      superseded_by = :entered_by where attr_id = :attr_id and
+	      superseded_on = 0 ";
+	try 
+	{
+	    $sth = $this->dbh->prepare($q);
+	    $sth->bindParam(':entered_by', $AUTHENTICATED_USER);
+	    $sth->bindParam(':attr_id',   $attr_id);
+	    $sth->execute();
+	    if( $sth->rowCount() != 1 )
+	    {
+		throw new Exception("Wrong number of rows affected. Expected 1, got: " . $sth->rowCount());
+	    }
+	} catch(Exception $e)
+	{
+	    $this->dbh->rollBack();
+	    die("updateAssetAttribute() - failed to expire old attribute: " . $e->getMessage());
+	}
+
+	// insert new row
+	$res = $this->insertAssetAttribute($display_priority, $body, 
+      $verbose, $rationale, $type, $loss_potential_disclosure, 
+      $loss_potential_disruption, $loss_potential_usurpation, 
+      $loss_potential_impersonation, $mitigation_disclosure, 
+      $mitigation_disruption, $mitigation_usurpation, 
+      $mitigation_impersonation, $attr_id, $parent_attr_id, 
+      $applicable_if_parent_false_instead_of_true);
+
+	$this->dbh->commit();
+	
+	return $res;
+    }
+
+
 
     /* asset attribute responses - these are properties of assets
      *  assets have attributes, these are those relevant to a given
@@ -218,6 +391,32 @@ class ivdb
     }
 
     
+
+    /* retrieve all current responses for a given asset id
+     * returns an array (list) of response rows ordered by display priority
+     * dies otherwise
+     */
+    function getAllResponses($asset_id)
+    {
+        $q = "SELECT ar.*, aa.* from asset_attribute_responses ar, 
+	asset_attributes aa where 
+	ar.asset_id = :asset_id AND ar.attr_id = aa.attr_id AND 
+	ar.superseded_on = 0 AND aa.superseded_on = 0 order by
+	aa.display_priority asc";
+
+	try
+	{
+	    $sth = $this->dbh->prepare($q);
+	    $sth->bindParam(':asset_id', $asset_id);
+	    $sth->execute();
+	    return $sth->fetchAll(PDO::FETCH_ASSOC);
+	} catch(Exception $e)
+	{
+	    die("getAllResponses() - failed to fetch responses for asset id $asset_id : " . $e->getMessage());
+	}
+    }
+
+
 
     /* insert a fresh attribute response for a given attribute and asset
      * 
