@@ -106,6 +106,70 @@
       $mitigation['impersonation'] = $_POST['mitigation_impersonation'];
 
       # check sanity here
+      $errors = Array();
+
+      if ( !is_numeric($display_priority) )
+      {
+          array_push($errors, "Display Priority is not a numeric value.  It must be a numeric value.");
+      }
+
+      if ( trim($body)  == '' )
+      {
+          array_push($errors, "Body appears to be empty.  It cannot be empty.");
+      }
+      $body = htmlspecialchars($body);
+
+      if ( trim($verbose) == '' )
+      {
+          array_push($errors, "Verbose appears to be empty.  It cannot be empty.");
+      }
+      $verbose = htmlspecialchars($verbose);
+
+      if ( trim($rationale) == '' )
+      {
+          array_push($errors, "Rationale appears to be empty.  It cannot be empty.");
+      }
+      $rationale = htmlspecialchars($rationale);
+
+      if ( trim($type) == '' )
+      {
+          array_push($errors, "Type appears to be empty.  It cannot be empty.");
+      }
+      $type = htmlspecialchars($type);
+
+      foreach ( $loss as $k => $v)
+      {
+          if ( !is_numeric($v) )
+	  {
+	      array_push($errors, "Loss $k is not a numeric value.  It must be a numeric value.");
+	  }
+
+	  if ( $v < 0 || $v > 10 )
+	  {
+	      array_push($errors, "Loss $k is outside the range of [0,10].  It must be between 0 and 10, inclusive.");
+	  }
+      }
+
+      foreach ( $mitigation as $k => $v)
+      {
+          if ( !is_numeric($v) )
+	  {
+	      array_push($errors, "Mitigation $k is not a numeric value.  It must be a numeric value.");
+	  }
+
+	  if ( $v < 0 || $v > 10 )
+	  {
+	      array_push($errors, "Mitigation $k is outside the range of [0,10].  It must be between 0 and 10, inclusive.");
+	  }
+      }
+
+      
+      # stop here if something is wrong
+      if ( count($errors) > 0 )
+      {
+          echo(implode("<br>\n", $errors));
+	  die();
+      }
 
       # all good, do it.
       $res = $db->insertAssetAttribute($display_priority, $body,
